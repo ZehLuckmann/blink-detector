@@ -11,11 +11,11 @@ import time
 import dlib
 import cv2
 
-SHAPE_PREDICTOR = "shape_predictor_68_face_landmarks.dat"
-VIDEO = "pseye.mp4"
+MODELO_PREDITOR_ROSTO = "shape_predictor_68_face_landmarks.dat"
+VIDEO = ""
 
 
-def eye_aspect_ratio(eye):
+def relacao_aspecto_olho(eye):
 	#Calcular as distâncias euclidianas(geometria, em duas e três dimensões)
 	#entre os dois marcos verticais dos olhos (x, y) - coordenadas
 	A = dist.euclidean(eye[1], eye[5])
@@ -26,24 +26,24 @@ def eye_aspect_ratio(eye):
 	C = dist.euclidean(eye[0], eye[3])
 
 	#Calcular a proporção de aspecto do olho
-	ear = (A + B) / (2.0 * C)
-	return ear
+	media_relacao_aspecto = (A + B) / (2.0 * C)
+	return media_relacao_aspecto
 
 #Defina duas constantes, uma para a relação de aspecto do olho para indicar
 #quando piscar em seguida, uma segunda constante para o número de quadros
 #consecutivos, o olho deve estar abaixo do limiar para contabilizar
-EYE_AR_THRESH = 0.3
-EYE_AR_CONSEC_FRAMES = 3
+LIMIAR_PISCADA = 0.3
+NUMEROS_FRAMES_PISCADA = 3
 
 #Inicializa os contadores de quadros e o número total de piscadas
-COUNTER = 0
+CONTADOR = 0
 TOTAL = 0
 
 #Inicializa a detecção de rosto usando o dlib (baseado em HOG) e em seguida,
 #cria a referência facial
 print("[INFO] Carregando prévia de referência facial ...")
 detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor(SHAPE_PREDICTOR)
+preditor = dlib.shape_predictor(MODELO_PREDITOR_ROSTO)
 
 # Pega os índices dos marcos faciais para o olho esquerdo e direito, respectivamente
 (lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
@@ -51,11 +51,19 @@ predictor = dlib.shape_predictor(SHAPE_PREDICTOR)
 
 #Inicie o streaming do vídeo
 print("[INFO] Iniciando o streaming de vídeo")
-#vs = FileVideoStream(VIDEO).start()
-#fileStream = True
-vs = VideoStream(src=0).start()
-#vs = VideoStream(usePiCamera=True).start()
-fileStream = False
+print("Escolha a forma de entrada")
+print("[1] Câmera")
+print("[2] Vídeo")
+opcaoVideo = input("Selecione uma opção")
+
+if opcaoVideo == 2:
+	VIDEO = input("Informe o caminho do arquivo:")
+	vs = FileVideoStream(VIDEO).start()	
+	fileStream = False
+else:
+	vs = VideoStream(src=0).start() 
+	fileStream = True
+
 time.sleep(1.0)
 
 # Loop por cada frame do vídeo
@@ -71,56 +79,56 @@ while True:
 	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
 	# Detecta rostos no quadro em escala de cinza
-	rects = detector(gray, 0)
+	faces = detector(gray, 0)
 
 	# loop pelas detecções do rosto
-	for rect in rects:
+	for face in faces:
 		# Determina os marcos faciais para a região do rosto e em seguida,
 		# converte o marco facial (x, y) para uma matriz NumPy
-		shape = predictor(gray, rect)
-		shape = face_utils.shape_to_np(shape)
+		forma = preditor(gray, face)
+		forma = face_utils.shape_to_np(forma)
 
 		# Extraia as coordenadas do olho esquerdo e direito, depois use as
 		# coordenadas para calcular a relação de aspecto do olho para ambos os olhos
-		leftEye = shape[lStart:lEnd]
-		rightEye = shape[rStart:rEnd]
-		leftEAR = eye_aspect_ratio(leftEye)
-		rightEAR = eye_aspect_ratio(rightEye)
+		olho_esquerdo = forma[lStart:lEnd]
+		olho_direito = forma[rStart:rEnd]
+		relacao_aspecto_esquerdo = relacao_aspecto_olho(olho_esquerdo)
+		relacao_aspecto_direito = relacao_aspecto_olho(olho_direito)
 
 		# Média da relação da proporção para ambos os olhos
-		ear = (leftEAR + rightEAR) / 2.0
+		media_relacao_aspecto = (relacao_aspecto_esquerdo + relacao_aspecto_direito) / 2.0
 
 		# Calcular o convexo do olho esquerdo e direito
-		leftEyeHull = cv2.convexHull(leftEye)
-		rightEyeHull = cv2.convexHull(rightEye)
-		cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
-		cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
+		contorno_olho_esquerdo = cv2.convexHull(olho_esquerdo)
+		contorno_olho_direito = cv2.convexHull(olho_direito)
+		cv2.drawContours(frame, [contorno_olho_esquerdo], -1, (0, 255, 0), 1)
+		cv2.drawContours(frame, [contorno_olho_direito], -1, (0, 255, 0), 1)
 
 		# Descubra se a relação de aspecto do olho está abaixo do limiar de intermitência
 		# e em caso afirmativo, incremente o contador do quadro intermitente
-		if ear < EYE_AR_THRESH:
-			COUNTER += 1
+		if media_relacao_aspecto < LIMIAR_PISCADA:
+			CONTADOR += 1
 		else:
 			# Se os olhos estiverem fechados por um número suficiente de tempo
 			# Então incrementa o número total de piscadas
-			if COUNTER >= EYE_AR_CONSEC_FRAMES:
+			if CONTADOR >= NUMEROS_FRAMES_PISCADA:
 				TOTAL += 1
 
 			#Redefinir o contador do frame do olho
-			COUNTER = 0
+			CONTADOR = 0
 
 		# Desenheao número total de pisca no quadro juntamente com a
 		# relação de aspecto do olho calculado para o quadro
 		cv2.putText(frame, "Piscadas: {}".format(TOTAL), (10, 30),
 			cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-		cv2.putText(frame, "Int: {:.2f}".format(ear), (300, 30),
+		cv2.putText(frame, "Int: {:.2f}".format(media_relacao_aspecto), (300, 30),
 			cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
 	# Mostra o quadro
 	cv2.imshow("Frame", frame)
 	key = cv2.waitKey(1) & 0xFF
 
-	# Se a tecla 'q' foi pressionada, saia fora do loop
+	# Se a tecla 'q' foi pressionada, sai fora do loop
 	if key == ord("q"):
 		break
 
