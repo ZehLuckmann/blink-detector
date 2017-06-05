@@ -1,6 +1,6 @@
 # BlinkDetector
 
-Neste rojeto, mostro como construir um detector do piscar de olhos usando OpenCV, Python e dlib.
+Neste projeto, mostro como construir um detector do piscar de olhos usando OpenCV, Python e dlib.
 
 O primeiro passo é realizar a detecção da referência facial para localizar os olhos em uma determinada moldura de um vídeo.
 
